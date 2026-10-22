@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Least squares with two predictors</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #faf9f5;
+      --panel: #ffffff;
+      --stage: #f1f0eb;
+      --ink: #292927;
+      --muted: #67645e;
+      --line: rgba(0, 0, 0, .14);
+      --grid: rgba(0, 0, 0, .11);
+      --candidate: #c66a16;
+      --candidate-dark: #8f4709;
+      --best: #7068b5;
+      --best-dark: #4d4788;
+      --primary-bg: #4d4788;
+      --point: #252523;
+      --point-edge: #ffffff;
+      --focus: #1665c1;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .04);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1f1f1d;
+        --panel: #292927;
+        --stage: #232321;
+        --ink: #f2f0e9;
+        --muted: #bbb7ae;
+        --line: rgba(255, 255, 255, .16);
+        --grid: rgba(255, 255, 255, .13);
+        --candidate: #f0a45d;
+        --candidate-dark: #ffc083;
+        --best: #aaa3ff;
+        --best-dark: #c8c4ff;
+        --primary-bg: #5b559f;
+        --point: #f2f0e9;
+        --point-edge: #292927;
+        --focus: #8fc5ff;
+        --shadow: none;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body { min-height: 100vh; }
+    button, input { font: inherit; }
+
+    .wrap {
+      width: min(1080px, 100%);
+      margin: 0 auto;
+      padding: 18px;
+    }
+
+    .applet-header { margin: 0 0 12px; }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 500;
+      line-height: 1.25;
+      letter-spacing: -.015em;
+    }
+
+    .subtitle {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .card {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(190px, 1fr));
+      gap: 12px 20px;
+      align-items: end;
+    }
+
+    .slider-control {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4px 10px;
+      min-width: 0;
+    }
+
+    .slider-label {
+      color: var(--candidate-dark);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    .control-value {
+      min-width: 6.5ch;
+      color: var(--ink);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    input[type="range"] {
+      grid-column: 1 / -1;
+      width: 100%;
+      height: 24px;
+      margin: 0;
+      accent-color: var(--candidate);
+      cursor: pointer;
+    }
+
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      accent-color: var(--candidate);
+      cursor: pointer;
+    }
+
+    input:focus-visible, button:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .equation {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 5px 18px;
+      margin: 12px 0 0;
+      padding: 9px 11px;
+      border-radius: 8px;
+      background: var(--stage);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .equation-main {
+      color: var(--candidate-dark);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .equation-note { color: var(--muted); }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      margin: 12px 0;
+      padding-top: 11px;
+      border-top: 1px solid var(--line);
+    }
+
+    .check-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--candidate-dark);
+      font-size: 12px;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toolbar-spacer { flex: 1 1 18px; }
+
+    button {
+      min-height: 31px;
+      padding: 5px 11px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: transparent;
+      color: var(--ink);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled) { background: var(--stage); }
+
+    button.primary {
+      border-color: var(--primary-bg);
+      background: var(--primary-bg);
+      color: #ffffff;
+    }
+
+    button.primary:hover:not(:disabled) {
+      background: var(--primary-bg);
+      color: #ffffff;
+      filter: brightness(1.08);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .48;
+    }
+
+    .stage {
+      position: relative;
+      height: 520px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: var(--stage);
+    }
+
+    .stage:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    #plane-plot {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: pan-y pinch-zoom;
+      cursor: grab;
+      user-select: none;
+    }
+
+    #plane-plot.dragging { cursor: grabbing; }
+    #plane-plot text { font-family: inherit; }
+
+    .plot-key,
+    .stage-note {
+      position: absolute;
+      z-index: 2;
+      top: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.3;
+      pointer-events: none;
+    }
+
+    .plot-key {
+      left: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      align-items: center;
+      max-width: calc(100% - 180px);
+    }
+
+    .stage-note { right: 12px; }
+
+    .key-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swatch {
+      display: inline-block;
+      width: 20px;
+      height: 8px;
+      border: 1px solid currentColor;
+    }
+
+    .key-candidate { color: var(--candidate-dark); }
+    .key-candidate .swatch { background: color-mix(in srgb, var(--candidate) 32%, transparent); }
+    .key-best { color: var(--best-dark); }
+    .key-best .swatch { background: var(--best); }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      margin-top: 10px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--line);
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 11px 13px;
+      background: var(--panel);
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.3;
+    }
+
+    .metric-value {
+      margin-top: 3px;
+      font-size: 21px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .metric.candidate .metric-value { color: var(--candidate-dark); }
+    .metric.best .metric-value { color: var(--best-dark); }
+
+    .footnote {
+      margin: 9px 2px 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    body.embedded .wrap { padding: 8px; }
+    body.embedded .applet-header { display: none; }
+
+    @media (max-width: 760px) {
+      .controls { grid-template-columns: 1fr; gap: 9px; }
+      .stage { height: 460px; }
+      .toolbar-spacer { display: none; }
+    }
+
+    @media (max-width: 560px) {
+      .wrap { padding: 10px; }
+      .card { padding: 11px; }
+      .stage { height: 410px; }
+      .plot-key { max-width: calc(100% - 24px); }
+      .stage-note { display: none; }
+      .metrics { grid-template-columns: 1fr; }
+      .metric-value { font-size: 19px; }
+      .toolbar { gap: 7px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="applet-header">
+      <h1>Least squares with two predictors</h1>
+      <p class="subtitle">Move a candidate plane and watch the vertical residuals and their squared sum change.</p>
+    </header>
+
+    <section class="card" aria-label="Interactive least-squares plane explorer">
+      <div class="controls">
+        <label class="slider-control" for="height">
+          <span class="slider-label">Height at average land and floor area ($000)</span>
+          <span class="control-value" id="height-value" aria-hidden="true">700.0</span>
+          <input id="height" type="range" min="500" max="1050" step="0.1" value="700" aria-label="Candidate fitted price at the average land and floor area, in thousands of dollars">
+        </label>
+
+        <label class="slider-control" for="land-slope">
+          <span class="slider-label">Land slope b₁ ($000 per m²)</span>
+          <span class="control-value" id="land-slope-value" aria-hidden="true">0.250</span>
+          <input id="land-slope" type="range" min="-0.2" max="0.9" step="0.001" value="0.25" aria-label="Candidate coefficient for land area, in thousands of dollars per square metre">
+        </label>
+
+        <label class="slider-control" for="floor-slope">
+          <span class="slider-label">Floor slope b₂ ($000 per m²)</span>
+          <span class="control-value" id="floor-slope-value" aria-hidden="true">1.500</span>
+          <input id="floor-slope" type="range" min="-0.5" max="4" step="0.001" value="1.5" aria-label="Candidate coefficient for floor area, in thousands of dollars per square metre">
+        </label>
+      </div>
+
+      <div class="equation" aria-live="polite">
+        <span class="equation-main" id="candidate-equation">Candidate: fitted price = 267.83 + 0.250 land + 1.500 floor</span>
+        <span class="equation-note">The height control recentres the intercept so the plane lifts vertically without changing its slopes.</span>
+      </div>
+
+      <div class="toolbar" aria-label="Applet controls">
+        <label class="check-control">
+          <input id="show-residuals" type="checkbox" checked>
+          <span>Show candidate residuals</span>
+        </label>
+        <button class="primary" id="reveal-best" type="button" aria-pressed="false">Reveal least-squares plane</button>
+        <button id="move-to-best" type="button" disabled>Move candidate to best</button>
+        <span class="toolbar-spacer" aria-hidden="true"></span>
+        <button id="reset-view" type="button">Reset view</button>
+        <button id="reset-challenge" type="button">Reset challenge</button>
+      </div>
+
+      <div class="stage" id="stage" role="group" tabindex="0" aria-label="Rotatable three-dimensional plot. Use the arrow keys to rotate the view.">
+        <div class="plot-key" aria-hidden="true">
+          <span class="key-item key-candidate"><span class="swatch"></span>candidate plane</span>
+          <span class="key-item key-best" id="best-key" hidden><span class="swatch"></span>least-squares plane</span>
+        </div>
+        <div class="stage-note" aria-hidden="true">Drag to rotate · arrow keys when focused</div>
+        <svg id="plane-plot" role="img" aria-labelledby="plot-title plot-description"></svg>
+      </div>
+
+      <div class="metrics" aria-label="Residual sums of squares">
+        <div class="metric candidate">
+          <div class="metric-label">Candidate RSS(b)</div>
+          <div class="metric-value" id="candidate-rss">128,429</div>
+        </div>
+        <div class="metric best">
+          <div class="metric-label">Minimum RSS(β̂)</div>
+          <div class="metric-value" id="best-rss">Hidden</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Excess RSS(b) − RSS(β̂)</div>
+          <div class="metric-value" id="excess-rss">—</div>
+        </div>
+      </div>
+
+      <p class="footnote">Each residual is the vertical response difference yᵢ − fitted yᵢ. Least squares minimises the sum of their squares; it does not minimise perpendicular distances to the plane. The vertical scale expands when needed to keep the whole candidate plane visible.</p>
+      <div class="sr-only" id="live-summary" aria-live="polite" aria-atomic="true"></div>
+    </section>
+  </main>
+
+  <script id="plane-math">
+    globalThis.LeastSquaresPlaneMath = (() => {
+      'use strict';
+
+      function solve3(matrix, vector) {
+        const augmented = matrix.map((row, i) => [...row, vector[i]]);
+        for (let column = 0; column < 3; column += 1) {
+          let pivot = column;
+          for (let row = column + 1; row < 3; row += 1) {
+            if (Math.abs(augmented[row][column]) > Math.abs(augmented[pivot][column])) pivot = row;
+          }
+          if (Math.abs(augmented[pivot][column]) < 1e-12) throw new Error('The predictor columns are not linearly independent.');
+          [augmented[column], augmented[pivot]] = [augmented[pivot], augmented[column]];
+          const divisor = augmented[column][column];
+          for (let j = column; j < 4; j += 1) augmented[column][j] /= divisor;
+          for (let row = 0; row < 3; row += 1) {
+            if (row === column) continue;
+            const multiple = augmented[row][column];
+            for (let j = column; j < 4; j += 1) augmented[row][j] -= multiple * augmented[column][j];
+          }
+        }
+        return augmented.map(row => row[3]);
+      }
+
+      function leastSquares(data) {
+        const sums = data.reduce((acc, d) => {
+          acc.n += 1;
+          acc.x += d.land;
+          acc.z += d.floor;
+          acc.xx += d.land * d.land;
+          acc.zz += d.floor * d.floor;
+          acc.xz += d.land * d.floor;
+          acc.y += d.price;
+          acc.xy += d.land * d.price;
+          acc.zy += d.floor * d.price;
+          return acc;
+        }, { n: 0, x: 0, z: 0, xx: 0, zz: 0, xz: 0, y: 0, xy: 0, zy: 0 });
+        return solve3(
+          [[sums.n, sums.x, sums.z], [sums.x, sums.xx, sums.xz], [sums.z, sums.xz, sums.zz]],
+          [sums.y, sums.xy, sums.zy]
+        );
+      }
+
+      const predictRaw = (coefficients, d) => coefficients[0] + coefficients[1] * d.land + coefficients[2] * d.floor;
+      const sseRaw = (data, coefficients) => data.reduce((sum, d) => sum + (d.price - predictRaw(coefficients, d)) ** 2, 0);
+
+      function means(data) {
+        return data.reduce((acc, d) => ({
+          land: acc.land + d.land / data.length,
+          floor: acc.floor + d.floor / data.length,
+          price: acc.price + d.price / data.length
+        }), { land: 0, floor: 0, price: 0 });
+      }
+
+      const centredToRaw = (parameters, centre) => [
+        parameters[0] - parameters[1] * centre.land - parameters[2] * centre.floor,
+        parameters[1],
+        parameters[2]
+      ];
+
+      return { solve3, leastSquares, predictRaw, sseRaw, means, centredToRaw };
+    })();
+  </script>
+
+  <script>
+    (() => {
+      'use strict';
+
+      if (window.self !== window.top || new URLSearchParams(window.location.search).has('embed')) {
+        document.body.classList.add('embedded');
+      }
+
+      const DATA = [
+        { land: 260, floor: 90, price: 406 },
+        { land: 300, floor: 180, price: 671 },
+        { land: 340, floor: 120, price: 520 },
+        { land: 390, floor: 240, price: 806 },
+        { land: 430, floor: 150, price: 594 },
+        { land: 480, floor: 275, price: 881 },
+        { land: 520, floor: 200, price: 718 },
+        { land: 570, floor: 110, price: 591 },
+        { land: 620, floor: 250, price: 939 },
+        { land: 670, floor: 170, price: 765 },
+        { land: 720, floor: 290, price: 1025 },
+        { land: 770, floor: 220, price: 845 },
+        { land: 820, floor: 130, price: 732 },
+        { land: 870, floor: 260, price: 1032 },
+        { land: 920, floor: 190, price: 956 }
+      ];
+
+      const EXTENT = {
+        land: [240, 940],
+        floor: [80, 300],
+        price: [300, 1200]
+      };
+      const DEFAULTS = [700, 0.25, 1.5];
+      const DEFAULT_VIEW = { azimuth: 45, elevation: 30 };
+      const math = globalThis.LeastSquaresPlaneMath;
+      const centre = math.means(DATA);
+      const bestRaw = math.leastSquares(DATA);
+      const bestCentred = [centre.price, bestRaw[1], bestRaw[2]];
+      const bestSse = math.sseRaw(DATA, bestRaw);
+      const $ = id => document.getElementById(id);
+
+      let view = { ...DEFAULT_VIEW };
+      let revealed = false;
+      let exactCandidate = null;
+      let drag = null;
+      let announceTimer;
+      let activePriceExtent = [...EXTENT.price];
+
+      const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+      const number = (value, digits = 0) => Number(value).toLocaleString('en-AU', {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits
+      });
+      const excessNumber = value => {
+        if (value < 1e-8) return '0';
+        if (value < .001) return '< 0.001';
+        if (value < 1) return number(value, 3);
+        if (value < 10) return number(value, 2);
+        return number(value, 0);
+      };
+      const normalize = (value, range) => 2 * (value - range[0]) / (range[1] - range[0]) - 1;
+      const signedTerm = (value, label, digits) => `${value < 0 ? '−' : '+'} ${number(Math.abs(value), digits)} ${label}`;
+
+      function controlCandidate() {
+        return [Number($('height').value), Number($('land-slope').value), Number($('floor-slope').value)];
+      }
+
+      function candidate() {
+        return exactCandidate ? [...exactCandidate] : controlCandidate();
+      }
+
+      function rawCandidate() {
+        return math.centredToRaw(candidate(), centre);
+      }
+
+      function predictedPrice(parameters, land, floor) {
+        return parameters[0] + parameters[1] * (land - centre.land) + parameters[2] * (floor - centre.floor);
+      }
+
+      function candidateSse(parameters) {
+        return DATA.reduce((sum, d) => sum + (d.price - predictedPrice(parameters, d.land, d.floor)) ** 2, 0);
+      }
+
+      function priceExtentFor(parameters) {
+        const cornerPrices = [];
+        for (const land of EXTENT.land) {
+          for (const floor of EXTENT.floor) cornerPrices.push(predictedPrice(parameters, land, floor));
+        }
+        const low = Math.min(EXTENT.price[0], ...cornerPrices);
+        const high = Math.max(EXTENT.price[1], ...cornerPrices);
+        const margin = .04 * (high - low);
+        return [
+          low < EXTENT.price[0] ? low - margin : EXTENT.price[0],
+          high > EXTENT.price[1] ? high + margin : EXTENT.price[1]
+        ];
+      }
+
+      function worldPoint(land, floor, price) {
+        return {
+          x: normalize(land, EXTENT.land),
+          y: normalize(floor, EXTENT.floor),
+          z: normalize(price, activePriceExtent)
+        };
+      }
+
+      function projection(width, height) {
+        const azimuth = view.azimuth * Math.PI / 180;
+        const elevation = view.elevation * Math.PI / 180;
+        const right = [-Math.sin(azimuth), Math.cos(azimuth), 0];
+        const up = [-Math.cos(azimuth) * Math.sin(elevation), -Math.sin(azimuth) * Math.sin(elevation), Math.cos(elevation)];
+        const depth = [Math.cos(azimuth) * Math.cos(elevation), Math.sin(azimuth) * Math.cos(elevation), Math.sin(elevation)];
+        const scale = Math.min(width / 5.1, height / 3.35);
+        const origin = { x: width / 2, y: height * .51 };
+        return point => ({
+          x: origin.x + scale * (point.x * right[0] + point.y * right[1] + point.z * right[2]),
+          y: origin.y - scale * (point.x * up[0] + point.y * up[1] + point.z * up[2]),
+          depth: point.x * depth[0] + point.y * depth[1] + point.z * depth[2]
+        });
+      }
+
+      function interpolate(a, b, t) {
+        return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t };
+      }
+
+      function clipPolygonAtZ(points, boundary, keepAbove) {
+        if (!points.length) return [];
+        const result = [];
+        for (let i = 0; i < points.length; i += 1) {
+          const current = points[i];
+          const previous = points[(i + points.length - 1) % points.length];
+          const currentInside = keepAbove ? current.z >= boundary : current.z <= boundary;
+          const previousInside = keepAbove ? previous.z >= boundary : previous.z <= boundary;
+          if (currentInside !== previousInside) {
+            const t = (boundary - previous.z) / (current.z - previous.z);
+            result.push(interpolate(previous, current, t));
+          }
+          if (currentInside) result.push(current);
+        }
+        return result;
+      }
+
+      function clipPolygon(points) {
+        return clipPolygonAtZ(clipPolygonAtZ(points, -1, true), 1, false);
+      }
+
+      function clipSegment(a, b) {
+        let start = a;
+        let end = b;
+        for (const [boundary, keepAbove] of [[-1, true], [1, false]]) {
+          const startInside = keepAbove ? start.z >= boundary : start.z <= boundary;
+          const endInside = keepAbove ? end.z >= boundary : end.z <= boundary;
+          if (!startInside && !endInside) return null;
+          if (startInside !== endInside) {
+            const crossing = interpolate(start, end, (boundary - start.z) / (end.z - start.z));
+            if (!startInside) start = crossing;
+            else end = crossing;
+          }
+        }
+        return [start, end];
+      }
+
+      function planePolygon(parameters) {
+        return clipPolygon([
+          [EXTENT.land[0], EXTENT.floor[0]],
+          [EXTENT.land[1], EXTENT.floor[0]],
+          [EXTENT.land[1], EXTENT.floor[1]],
+          [EXTENT.land[0], EXTENT.floor[1]]
+        ].map(([land, floor]) => worldPoint(land, floor, predictedPrice(parameters, land, floor))));
+      }
+
+      const svgLine = (a, b, attributes = '') => `<line x1="${a.x.toFixed(2)}" y1="${a.y.toFixed(2)}" x2="${b.x.toFixed(2)}" y2="${b.y.toFixed(2)}" ${attributes}/>`;
+
+      function planeMarkup(parameters, project, kind) {
+        const polygon = planePolygon(parameters).map(project);
+        if (polygon.length < 3) return '';
+        const isBest = kind === 'best';
+        const colour = isBest ? 'var(--best)' : 'var(--candidate)';
+        const dark = isBest ? 'var(--best-dark)' : 'var(--candidate-dark)';
+          const opacity = isBest ? '1' : '.34';
+        let markup = `<polygon points="${polygon.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}" fill="${colour}" fill-opacity="${opacity}" stroke="${dark}" stroke-width="${isBest ? 1.6 : 2.4}" stroke-linejoin="round"/>`;
+        const landGrid = [380, 520, 660, 800];
+        const floorGrid = [124, 168, 212, 256];
+        landGrid.forEach(land => {
+          const segment = clipSegment(
+            worldPoint(land, EXTENT.floor[0], predictedPrice(parameters, land, EXTENT.floor[0])),
+            worldPoint(land, EXTENT.floor[1], predictedPrice(parameters, land, EXTENT.floor[1]))
+          );
+          if (segment) markup += svgLine(project(segment[0]), project(segment[1]), `stroke="${dark}" stroke-opacity="${isBest ? '.46' : '.55'}" stroke-width=".8"`);
+        });
+        floorGrid.forEach(floor => {
+          const segment = clipSegment(
+            worldPoint(EXTENT.land[0], floor, predictedPrice(parameters, EXTENT.land[0], floor)),
+            worldPoint(EXTENT.land[1], floor, predictedPrice(parameters, EXTENT.land[1], floor))
+          );
+          if (segment) markup += svgLine(project(segment[0]), project(segment[1]), `stroke="${dark}" stroke-opacity="${isBest ? '.46' : '.55'}" stroke-width=".8"`);
+        });
+        return markup;
+      }
+
+      function boxMarkup(project) {
+        let markup = '';
+        const ticks = [-1, -.5, 0, .5, 1];
+        ticks.forEach(value => {
+          markup += svgLine(project({ x: value, y: -1, z: -1 }), project({ x: value, y: 1, z: -1 }), 'stroke="var(--grid)" stroke-width=".8"');
+          markup += svgLine(project({ x: -1, y: value, z: -1 }), project({ x: 1, y: value, z: -1 }), 'stroke="var(--grid)" stroke-width=".8"');
+        });
+        const vertices = [-1, 1].flatMap(x => [-1, 1].flatMap(y => [-1, 1].map(z => ({ x, y, z }))));
+        for (let i = 0; i < vertices.length; i += 1) {
+          for (let j = i + 1; j < vertices.length; j += 1) {
+            const a = vertices[i];
+            const b = vertices[j];
+            const differences = Number(a.x !== b.x) + Number(a.y !== b.y) + Number(a.z !== b.z);
+            if (differences === 1) markup += svgLine(project(a), project(b), 'stroke="var(--line)" stroke-width="1"');
+          }
+        }
+        return markup;
+      }
+
+      function axesMarkup(project) {
+        const origin = project({ x: -1, y: -1, z: -1 });
+        const landEnd = project({ x: 1, y: -1, z: -1 });
+        const floorEnd = project({ x: -1, y: 1, z: -1 });
+        const priceEnd = project({ x: -1, y: -1, z: 1 });
+        let markup = svgLine(origin, landEnd, 'stroke="var(--ink)" stroke-opacity=".7" stroke-width="1.3"');
+        markup += svgLine(origin, floorEnd, 'stroke="var(--ink)" stroke-opacity=".7" stroke-width="1.3"');
+        markup += svgLine(origin, priceEnd, 'stroke="var(--ink)" stroke-opacity=".7" stroke-width="1.3"');
+        markup += `<text x="${landEnd.x.toFixed(2)}" y="${(landEnd.y + 20).toFixed(2)}" fill="var(--ink)" font-size="12" text-anchor="middle">Land area (m²)</text>`;
+        markup += `<text x="${floorEnd.x.toFixed(2)}" y="${(floorEnd.y + 20).toFixed(2)}" fill="var(--ink)" font-size="12" text-anchor="middle">Floor area (m²)</text>`;
+        markup += `<text x="${(priceEnd.x - 8).toFixed(2)}" y="${(priceEnd.y - 8).toFixed(2)}" fill="var(--ink)" font-size="12" text-anchor="end">Sale price ($000)</text>`;
+        return markup;
+      }
+
+      function residualMarkup(parameters, project) {
+        if (!$('show-residuals').checked) return '';
+        return DATA.map((d, index) => {
+          const fitted = predictedPrice(parameters, d.land, d.floor);
+          const segment = clipSegment(worldPoint(d.land, d.floor, fitted), worldPoint(d.land, d.floor, d.price));
+          if (!segment) return '';
+          const a = project(segment[0]);
+          const b = project(segment[1]);
+          const foot = project(worldPoint(d.land, d.floor, fitted));
+          return `${svgLine(a, b, 'stroke="var(--candidate-dark)" stroke-width="2" stroke-opacity=".88"')}` +
+            `<circle cx="${foot.x.toFixed(2)}" cy="${foot.y.toFixed(2)}" r="2.6" fill="var(--panel)" stroke="var(--candidate-dark)" stroke-width="1.4"><title>Candidate fitted value for house ${index + 1}: ${number(fitted, 1)}</title></circle>`;
+        }).join('');
+      }
+
+      function pointsMarkup(project) {
+        return DATA.map((d, index) => ({ d, index, p: project(worldPoint(d.land, d.floor, d.price)) }))
+          .sort((a, b) => a.p.depth - b.p.depth)
+          .map(({ d, index, p }) => `<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="5" fill="var(--point)" stroke="var(--point-edge)" stroke-width="1.5"><title>House ${index + 1}: land ${d.land} square metres, floor ${d.floor} square metres, price ${d.price} thousand dollars</title></circle>`)
+          .join('');
+      }
+
+      function draw(parameters) {
+        const svg = $('plane-plot');
+        const width = Math.max(320, Math.round(svg.clientWidth || 980));
+        const height = Math.max(360, Math.round(svg.clientHeight || 520));
+        activePriceExtent = priceExtentFor(parameters);
+        const project = projection(width, height);
+        const raw = math.centredToRaw(parameters, centre);
+        const rss = candidateSse(parameters);
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        svg.innerHTML = `
+          <title id="plot-title">House prices and two regression planes</title>
+          <desc id="plot-description">Fifteen house-price observations plotted against land and floor area. The translucent candidate plane has coefficients ${number(raw[0], 2)}, ${number(raw[1], 3)}, and ${number(raw[2], 3)} and residual sum of squares ${number(rss, 0)}. ${revealed ? `The opaque least-squares plane has minimum residual sum of squares ${number(bestSse, 0)}.` : 'The least-squares plane is hidden.'} Residuals are vertical response differences. Dragging rotates the view.</desc>
+          ${boxMarkup(project)}
+          ${revealed ? planeMarkup(bestCentred, project, 'best') : ''}
+          ${planeMarkup(parameters, project, 'candidate')}
+          ${residualMarkup(parameters, project)}
+          ${pointsMarkup(project)}
+          ${axesMarkup(project)}
+        `;
+      }
+
+      function updateReadouts(parameters, shouldAnnounce = false) {
+        const raw = math.centredToRaw(parameters, centre);
+        const rss = candidateSse(parameters);
+        const excess = Math.max(0, rss - bestSse);
+        $('height-value').textContent = number(parameters[0], 1);
+        $('land-slope-value').textContent = number(parameters[1], 3);
+        $('floor-slope-value').textContent = number(parameters[2], 3);
+        $('candidate-equation').textContent = `Candidate: fitted price = ${number(raw[0], 2)} ${signedTerm(raw[1], 'land', 3)} ${signedTerm(raw[2], 'floor', 3)}`;
+        $('candidate-rss').textContent = number(rss, 0);
+        $('best-rss').textContent = revealed ? number(bestSse, 0) : 'Hidden';
+        $('excess-rss').textContent = revealed ? excessNumber(excess) : '—';
+        $('best-key').hidden = !revealed;
+        $('move-to-best').disabled = !revealed;
+        $('reveal-best').textContent = revealed ? 'Hide least-squares plane' : 'Reveal least-squares plane';
+        $('reveal-best').setAttribute('aria-pressed', String(revealed));
+
+        if (shouldAnnounce) {
+          clearTimeout(announceTimer);
+          announceTimer = setTimeout(() => {
+            $('live-summary').textContent = revealed
+              ? `Candidate residual sum of squares ${number(rss, 0)}. Minimum ${number(bestSse, 0)}. Excess ${excessNumber(excess)}.`
+              : `Candidate residual sum of squares ${number(rss, 0)}. The least-squares plane remains hidden.`;
+          }, 250);
+        }
+      }
+
+      function render(shouldAnnounce = false) {
+        const parameters = candidate();
+        updateReadouts(parameters, shouldAnnounce);
+        draw(parameters);
+      }
+
+      function setControls(parameters) {
+        $('height').value = parameters[0];
+        $('land-slope').value = parameters[1];
+        $('floor-slope').value = parameters[2];
+      }
+
+      ['height', 'land-slope', 'floor-slope'].forEach(id => {
+        $(id).addEventListener('input', () => {
+          exactCandidate = null;
+          render(true);
+        });
+      });
+
+      $('show-residuals').addEventListener('change', () => render(true));
+
+      $('reveal-best').addEventListener('click', () => {
+        revealed = !revealed;
+        render(true);
+      });
+
+      $('move-to-best').addEventListener('click', () => {
+        exactCandidate = [...bestCentred];
+        setControls(bestCentred);
+        render(true);
+      });
+
+      $('reset-view').addEventListener('click', () => {
+        view = { ...DEFAULT_VIEW };
+        render(false);
+        $('live-summary').textContent = 'View reset.';
+      });
+
+      $('reset-challenge').addEventListener('click', () => {
+        exactCandidate = null;
+        revealed = false;
+        view = { ...DEFAULT_VIEW };
+        setControls(DEFAULTS);
+        $('show-residuals').checked = true;
+        render(true);
+      });
+
+      const svg = $('plane-plot');
+      svg.addEventListener('pointerdown', event => {
+        if (event.button !== 0) return;
+        drag = { x: event.clientX, y: event.clientY, azimuth: view.azimuth, elevation: view.elevation };
+        svg.classList.add('dragging');
+        svg.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      });
+
+      svg.addEventListener('pointermove', event => {
+        if (!drag) return;
+        view.azimuth = clamp(drag.azimuth + (event.clientX - drag.x) * .18, 18, 72);
+        view.elevation = clamp(drag.elevation - (event.clientY - drag.y) * .13, 12, 42);
+        draw(candidate());
+      });
+
+      function finishDrag(event) {
+        if (!drag) return;
+        drag = null;
+        svg.classList.remove('dragging');
+        if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+      }
+
+      svg.addEventListener('pointerup', finishDrag);
+      svg.addEventListener('pointercancel', finishDrag);
+
+      $('stage').addEventListener('keydown', event => {
+        const step = 3;
+        let handled = true;
+        if (event.key === 'ArrowLeft') view.azimuth = clamp(view.azimuth - step, 18, 72);
+        else if (event.key === 'ArrowRight') view.azimuth = clamp(view.azimuth + step, 18, 72);
+        else if (event.key === 'ArrowUp') view.elevation = clamp(view.elevation + step, 12, 42);
+        else if (event.key === 'ArrowDown') view.elevation = clamp(view.elevation - step, 12, 42);
+        else handled = false;
+        if (!handled) return;
+        event.preventDefault();
+        draw(candidate());
+      });
+
+      let resizeFrame;
+      const resize = () => {
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(() => draw(candidate()));
+      };
+      if ('ResizeObserver' in window) new ResizeObserver(resize).observe($('stage'));
+      else window.addEventListener('resize', resize);
+
+      setControls(DEFAULTS);
+      render(false);
+    })();
+  </script>
+</body>
+</html>

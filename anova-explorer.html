@@ -1,0 +1,1017 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ANOVA: between and residual variation</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #faf9f5;
+      --panel: #ffffff;
+      --stage: rgba(0, 0, 0, .04);
+      --ink: #2c2c2a;
+      --muted: #66645f;
+      --line: rgba(0, 0, 0, .12);
+      --grid: rgba(0, 0, 0, .10);
+      --between: #7f77dd;
+      --between-dark: #5b53bc;
+      --between-soft: rgba(127, 119, 221, .10);
+      --residual: #1d9e75;
+      --residual-dark: #0f6e56;
+      --residual-soft: rgba(29, 158, 117, .10);
+      --focus: #1665c1;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .03);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1f1f1d;
+        --panel: #292927;
+        --stage: rgba(255, 255, 255, .055);
+        --ink: #f2f0e9;
+        --muted: #b8b5ac;
+        --line: rgba(255, 255, 255, .15);
+        --grid: rgba(255, 255, 255, .12);
+        --between: #aaa3ff;
+        --between-dark: #c0bbff;
+        --between-soft: rgba(170, 163, 255, .11);
+        --residual: #53cda4;
+        --residual-dark: #75dfbb;
+        --residual-soft: rgba(83, 205, 164, .11);
+        --focus: #8fc5ff;
+        --shadow: none;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body { min-height: 100vh; }
+    button, input { font: inherit; }
+
+    .wrap {
+      width: min(1040px, 100%);
+      margin: 0 auto;
+      padding: 18px;
+    }
+
+    .applet-header { margin: 0 0 12px; }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 500;
+      line-height: 1.25;
+      letter-spacing: -.015em;
+    }
+
+    .subtitle {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .card {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(145px, 1fr));
+      gap: 10px 18px;
+      align-items: end;
+      margin-bottom: 12px;
+    }
+
+    .slider-control {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 3px 8px;
+      min-width: 0;
+    }
+
+    .slider-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .slider-control.mean .slider-label { color: var(--between-dark); }
+    .slider-control.variance .slider-label { color: var(--residual-dark); }
+
+    .control-value {
+      min-width: 3.2ch;
+      color: var(--ink);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    input[type="range"] {
+      grid-column: 1 / -1;
+      width: 100%;
+      height: 20px;
+      margin: 0;
+      accent-color: var(--between);
+      cursor: pointer;
+    }
+
+    .slider-control.variance input { accent-color: var(--residual); }
+
+    .view-controls {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 8px 16px;
+      min-height: 27px;
+      padding-top: 1px;
+      border-top: 1px solid var(--line);
+    }
+
+    .check-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .check-control input {
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      accent-color: currentColor;
+      cursor: pointer;
+    }
+
+    .check-control.between { color: var(--between-dark); }
+    .check-control.residual { color: var(--residual-dark); }
+    .check-control.inference { margin-left: auto; color: var(--muted); }
+    .check-control.between input { accent-color: var(--between); }
+    .check-control.residual input { accent-color: var(--residual); }
+    .check-control.inference input { accent-color: var(--ink); }
+
+    .reset-button {
+      min-height: 27px;
+      padding: 3px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .reset-button:hover { background: var(--stage); color: var(--ink); }
+
+    input:focus-visible, button:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .stage {
+      position: relative;
+      height: 330px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: var(--stage);
+      transition: height 180ms ease;
+    }
+
+    body.inference-open .stage { height: 245px; }
+
+    #anova-plot {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    #anova-plot text { font-family: inherit; }
+
+    .plot-key,
+    .stage-note {
+      position: absolute;
+      z-index: 1;
+      top: 9px;
+      color: var(--muted);
+      font-size: 11px;
+      pointer-events: none;
+    }
+
+    .plot-key {
+      left: 12px;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .stage-note { right: 12px; }
+
+    .key-item { display: inline-flex; align-items: center; gap: 6px; }
+
+    .key-line {
+      display: inline-block;
+      width: 21px;
+      height: 0;
+      border-top: 2px solid;
+    }
+
+    .key-line.between { border-color: var(--between); border-top-style: dashed; }
+    .key-line.residual { border-color: var(--residual); }
+
+    .calculations {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(130px, .28fr);
+      gap: 16px;
+      align-items: center;
+      margin-top: 8px;
+      padding: 13px 16px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+    }
+
+    .calculations[hidden] { display: none; }
+
+    .concept-fraction {
+      min-width: 0;
+    }
+
+    .concept-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 14px;
+      padding: 7px 4px;
+    }
+
+    .concept-row:first-child {
+      border-bottom: 2px solid var(--ink);
+    }
+
+    .concept-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .concept-label.between { color: var(--between-dark); }
+    .concept-label.residual { color: var(--residual-dark); }
+
+    .concept-value {
+      font-size: 18px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .concept-value.between { color: var(--between-dark); }
+    .concept-value.residual { color: var(--residual-dark); }
+
+    .calculation-disclosure {
+      display: flex;
+      align-items: center;
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--stage);
+    }
+
+    .calculation-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .calculation-toggle input {
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      accent-color: var(--ink);
+      cursor: pointer;
+    }
+
+    .equals-sign {
+      color: var(--muted);
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .ratio-result { text-align: center; }
+
+    .ratio-label {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    .ratio-value {
+      margin-top: 3px;
+      font-size: clamp(18px, 2vw, 24px);
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.15;
+    }
+
+    .inference-panel {
+      display: grid;
+      grid-template-columns: minmax(280px, 1.45fr) minmax(210px, .75fr);
+      gap: 18px;
+      align-items: center;
+      margin-top: 12px;
+      padding: 11px 2px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .inference-panel[hidden] { display: none; }
+
+    .curve-wrap {
+      height: 126px;
+      min-width: 0;
+      border-radius: 7px;
+      background: var(--stage);
+    }
+
+    #f-curve { display: block; width: 100%; height: 100%; }
+    #f-curve text { font-family: inherit; }
+
+    .inference-copy { padding-right: 10px; }
+
+    .inference-kicker {
+      margin: 0 0 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .inference-copy p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .inference-values {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 14px;
+      margin: 8px 0 5px;
+      color: var(--ink);
+      font-size: 19px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    body.embedded .wrap { padding: 8px; }
+    body.embedded .applet-header { display: none; }
+
+    @media (max-width: 800px) {
+      .controls { grid-template-columns: repeat(2, minmax(135px, 1fr)); }
+      .stage { height: 315px; }
+      body.inference-open .stage { height: 245px; }
+      .inference-panel { grid-template-columns: 1fr 220px; }
+    }
+
+    @media (max-width: 590px) {
+      .wrap { padding: 10px; }
+      .card { padding: 11px; }
+      .view-controls { flex-wrap: wrap; gap: 7px 12px; }
+      .check-control.inference { margin-left: 0; }
+      .reset-button { margin-left: auto; }
+      .stage, body.inference-open .stage { height: 300px; }
+      .plot-key { gap: 9px; }
+      .stage-note { display: none; }
+      .calculations { grid-template-columns: 1fr; gap: 8px; }
+      .equals-sign { text-align: center; }
+      .inference-panel { grid-template-columns: 1fr; }
+      .curve-wrap { height: 140px; }
+    }
+
+    @media (max-width: 390px) {
+      .controls { grid-template-columns: 1fr; }
+      .stage, body.inference-open .stage { height: 285px; }
+      .plot-key { font-size: 10px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .stage { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="applet-header">
+      <h1>ANOVA: between and residual variation</h1>
+      <p class="subtitle">Move the sample means apart, or change the spread within each group.</p>
+    </header>
+
+    <section class="card" aria-label="Interactive ANOVA variation explorer">
+      <div class="controls">
+        <label class="slider-control mean" for="mean-a">
+          <span class="slider-label">Sample mean A</span>
+          <span class="control-value" id="mean-a-value" aria-hidden="true">7.0</span>
+          <input id="mean-a" type="range" min="5" max="15" step="0.5" value="7" aria-label="Sample mean for group A">
+        </label>
+
+        <label class="slider-control mean" for="mean-b">
+          <span class="slider-label">Sample mean B</span>
+          <span class="control-value" id="mean-b-value" aria-hidden="true">10.0</span>
+          <input id="mean-b" type="range" min="5" max="15" step="0.5" value="10" aria-label="Sample mean for group B">
+        </label>
+
+        <label class="slider-control mean" for="mean-c">
+          <span class="slider-label">Sample mean C</span>
+          <span class="control-value" id="mean-c-value" aria-hidden="true">13.0</span>
+          <input id="mean-c" type="range" min="5" max="15" step="0.5" value="13" aria-label="Sample mean for group C">
+        </label>
+
+        <label class="slider-control variance" for="variance">
+          <span class="slider-label">Shared sample variance <i>s</i><sup>2</sup></span>
+          <span class="control-value" id="variance-value" aria-hidden="true">2.25</span>
+          <input id="variance" type="range" min="0.25" max="9" step="0.25" value="2.25" aria-label="Shared within-group sample variance">
+        </label>
+
+        <div class="view-controls" aria-label="Display options">
+          <label class="check-control between">
+            <input id="show-between" type="checkbox">
+            <span>Between distances</span>
+          </label>
+          <label class="check-control residual">
+            <input id="show-residual" type="checkbox">
+            <span>Residual distances</span>
+          </label>
+          <label class="check-control inference">
+            <input id="show-inference" type="checkbox" aria-controls="inference-panel" aria-expanded="false">
+            <span>Show inference (F and p-value)</span>
+          </label>
+          <button class="reset-button" id="reset" type="button">Reset</button>
+        </div>
+      </div>
+
+      <div class="stage" id="stage">
+        <div class="plot-key" aria-hidden="true">
+          <span class="key-item"><span class="key-line between"></span>between</span>
+          <span class="key-item"><span class="key-line residual"></span>residual</span>
+        </div>
+        <div class="stage-note" aria-hidden="true">6 observations per group</div>
+        <svg id="anova-plot" role="group" aria-labelledby="plot-title plot-description"></svg>
+      </div>
+
+      <div class="calculation-disclosure">
+        <label class="calculation-toggle">
+          <input id="show-calculation" type="checkbox" aria-controls="calculation-panel" aria-expanded="false">
+          <span>Show ANOVA calculation</span>
+        </label>
+      </div>
+
+      <div class="calculations" id="calculation-panel" aria-label="ANOVA mean-square calculation" hidden>
+        <div class="concept-fraction">
+          <div class="concept-row">
+            <span class="concept-label between">
+              <span class="key-line between" aria-hidden="true"></span>
+              weighted average of squared between distances
+            </span>
+            <span class="concept-value between" id="simple-between-ms">54.00</span>
+          </div>
+          <div class="concept-row">
+            <span class="concept-label residual">
+              <span class="key-line residual" aria-hidden="true"></span>
+              average of squared residual distances
+            </span>
+            <span class="concept-value residual" id="simple-residual-ms">2.25</span>
+          </div>
+        </div>
+        <div class="equals-sign" aria-hidden="true">=</div>
+        <div class="ratio-result">
+          <div class="ratio-label">mean-square ratio</div>
+          <div class="ratio-value" id="simple-ratio-value">24.00</div>
+        </div>
+      </div>
+
+      <section class="inference-panel" id="inference-panel" hidden>
+        <div class="curve-wrap">
+          <svg id="f-curve" role="img" aria-labelledby="f-title f-description"></svg>
+        </div>
+        <div class="inference-copy">
+          <div class="inference-kicker">Inference</div>
+          <p>Under the ANOVA model and its null hypothesis of equal population means, this ratio follows an F distribution. Its right-tail area is the p-value.</p>
+          <div class="inference-values">
+            <span id="advanced-f">F(2, 15) = 24.00</span>
+            <span id="advanced-p">p &lt; .0001</span>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <div class="sr-only" id="live-summary" aria-live="polite" aria-atomic="true"></div>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      if (window.self !== window.top || new URLSearchParams(window.location.search).has('embed')) {
+        document.body.classList.add('embedded');
+      }
+
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      const GROUPS = ['A', 'B', 'C'];
+      const N_PER_GROUP = 6;
+      const TOTAL_N = GROUPS.length * N_PER_GROUP;
+      const RAW_PATTERNS = [
+        [-1.45, -0.82, -0.24, 0.18, 0.83, 1.50],
+        [-1.31, -0.91, -0.12, 0.27, 0.72, 1.35],
+        [-1.52, -0.67, -0.36, 0.33, 0.81, 1.41]
+      ];
+      const JITTER = [-.36, -.22, -.075, .075, .22, .36];
+      const DEFAULTS = { means: [7, 10, 13], variance: 2.25 };
+
+      const $ = id => document.getElementById(id);
+      const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+      function standardise(values) {
+        const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+        const centred = values.map(value => value - mean);
+        const sampleVariance = centred.reduce((sum, value) => sum + value * value, 0) / (values.length - 1);
+        const sampleSd = Math.sqrt(sampleVariance);
+        return centred.map(value => value / sampleSd);
+      }
+
+      const PATTERNS = RAW_PATTERNS.map(standardise);
+
+      function compute() {
+        const means = GROUPS.map((_, index) => Number($(`mean-${GROUPS[index].toLowerCase()}`).value));
+        const variance = Number($('variance').value);
+        const sd = Math.sqrt(variance);
+        const observations = PATTERNS.map((pattern, groupIndex) =>
+          pattern.map(offset => means[groupIndex] + sd * offset)
+        );
+        const grandMean = means.reduce((sum, mean) => sum + N_PER_GROUP * mean, 0) / TOTAL_N;
+        const betweenVariation = means.reduce(
+          (sum, mean) => sum + N_PER_GROUP * (mean - grandMean) ** 2,
+          0
+        );
+        const residualVariation = observations.reduce(
+          (outer, values, groupIndex) => outer + values.reduce(
+            (inner, value) => inner + (value - means[groupIndex]) ** 2,
+            0
+          ),
+          0
+        );
+        const dfBetween = GROUPS.length - 1;
+        const dfResidual = TOTAL_N - GROUPS.length;
+        const msBetween = betweenVariation / dfBetween;
+        const msResidual = residualVariation / dfResidual;
+        const ratio = msBetween / msResidual;
+        const p = (dfResidual / (dfResidual + 2 * ratio)) ** (dfResidual / 2);
+
+        return {
+          means,
+          variance,
+          observations,
+          grandMean,
+          betweenVariation,
+          residualVariation,
+          dfBetween,
+          dfResidual,
+          msBetween,
+          msResidual,
+          ratio,
+          p
+        };
+      }
+
+      function number(value, digits = 2) {
+        if (!Number.isFinite(value)) return '—';
+        return value.toFixed(digits);
+      }
+
+      function pText(p) {
+        if (p < .0001) return 'p < .0001';
+        if (p >= .99995) return 'p = 1.0000';
+        return `p = ${p.toFixed(4).replace(/^0/, '')}`;
+      }
+
+      function svgElement(name, attributes = {}) {
+        const node = document.createElementNS(SVG_NS, name);
+        Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
+        return node;
+      }
+
+      function addText(parent, text, attributes = {}) {
+        const node = svgElement('text', attributes);
+        node.textContent = text;
+        parent.appendChild(node);
+        return node;
+      }
+
+      function updateControls(model) {
+        model.means.forEach((mean, index) => {
+          const input = $(`mean-${GROUPS[index].toLowerCase()}`);
+          $(`mean-${GROUPS[index].toLowerCase()}-value`).textContent = number(mean, 1);
+          input.setAttribute('aria-valuetext', number(mean, 1));
+        });
+        $('variance-value').textContent = number(model.variance, 2);
+        $('variance').setAttribute('aria-valuetext', number(model.variance, 2));
+      }
+
+      function updateCalculations(model) {
+        $('simple-between-ms').textContent = number(model.msBetween);
+        $('simple-residual-ms').textContent = number(model.msResidual);
+        $('simple-ratio-value').textContent = number(model.ratio);
+        $('advanced-f').textContent = `F(${model.dfBetween}, ${model.dfResidual}) = ${number(model.ratio)}`;
+        $('advanced-p').textContent = pText(model.p);
+      }
+
+      function drawPlot(model) {
+        const svg = $('anova-plot');
+        const stage = $('stage');
+        const width = Math.max(320, Math.round(stage.clientWidth || 900));
+        const height = Math.max(230, Math.round(stage.clientHeight || 330));
+        const compact = width < 520;
+        const margin = { top: 42, right: compact ? 16 : 28, bottom: 43, left: compact ? 38 : 48 };
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+        const band = plotWidth / GROUPS.length;
+        const yMin = 0;
+        const yMax = 20;
+        const y = value => margin.top + (yMax - value) / (yMax - yMin) * plotHeight;
+        const x = groupIndex => margin.left + band * (groupIndex + .5);
+        const showBetween = $('show-between').checked;
+        const showResidual = $('show-residual').checked;
+        const ink = css('--ink');
+        const muted = css('--muted');
+        const grid = css('--grid');
+        const panel = css('--panel');
+        const between = css('--between');
+        const residual = css('--residual');
+
+        svg.replaceChildren();
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+        const title = svgElement('title', { id: 'plot-title' });
+        title.textContent = 'Three groups with between and residual distances';
+        svg.appendChild(title);
+        const description = svgElement('desc', { id: 'plot-description' });
+        const visibleLayers = [];
+        if (showBetween) visibleLayers.push('Violet dashed lines show group mean to grand mean distances.');
+        if (showResidual) visibleLayers.push('Green solid lines show observation to group mean residual distances.');
+        if (!visibleLayers.length) visibleLayers.push('No distance lines are currently shown.');
+        description.textContent = `Group means are ${model.means.map(value => number(value, 1)).join(', ')} and the grand mean is ${number(model.grandMean, 1)}. ${visibleLayers.join(' ')}`;
+        svg.appendChild(description);
+
+        const defs = svgElement('defs');
+        const startMarker = svgElement('marker', {
+          id: 'arrow-start', markerWidth: '6', markerHeight: '6', refX: '2.2', refY: '3', orient: 'auto', markerUnits: 'userSpaceOnUse'
+        });
+        startMarker.appendChild(svgElement('path', { d: 'M6,0 L0,3 L6,6', fill: 'none', stroke: between, 'stroke-width': '1.25' }));
+        const endMarker = svgElement('marker', {
+          id: 'arrow-end', markerWidth: '6', markerHeight: '6', refX: '3.8', refY: '3', orient: 'auto', markerUnits: 'userSpaceOnUse'
+        });
+        endMarker.appendChild(svgElement('path', { d: 'M0,0 L6,3 L0,6', fill: 'none', stroke: between, 'stroke-width': '1.25' }));
+        defs.append(startMarker, endMarker);
+        svg.appendChild(defs);
+
+        const ticks = compact ? [0, 10, 20] : [0, 5, 10, 15, 20];
+        ticks.forEach(tick => {
+          svg.appendChild(svgElement('line', {
+            x1: margin.left,
+            x2: width - margin.right,
+            y1: y(tick),
+            y2: y(tick),
+            stroke: grid,
+            'stroke-width': '1'
+          }));
+          addText(svg, String(tick), {
+            x: margin.left - 9,
+            y: y(tick) + 4,
+            fill: muted,
+            'font-size': '10.5',
+            'text-anchor': 'end'
+          });
+        });
+
+        svg.appendChild(svgElement('line', {
+          x1: margin.left,
+          x2: width - margin.right,
+          y1: y(model.grandMean),
+          y2: y(model.grandMean),
+          stroke: ink,
+          'stroke-width': '1.4',
+          'stroke-dasharray': '7 5',
+          opacity: '.72'
+        }));
+        addText(svg, `grand mean ${number(model.grandMean, 1)}`, {
+          x: width - margin.right - 3,
+          y: Math.max(margin.top + 11, y(model.grandMean) - 7),
+          fill: ink,
+          opacity: '.78',
+          'font-size': compact ? '9.5' : '10.5',
+          'text-anchor': 'end'
+        });
+
+        model.observations.forEach((values, groupIndex) => {
+          const centre = x(groupIndex);
+          const meanY = y(model.means[groupIndex]);
+          const jitterScale = Math.min(52, band * .38);
+
+          if (showResidual) {
+            values.forEach((value, pointIndex) => {
+              const pointX = centre + JITTER[pointIndex] * jitterScale * 2;
+              svg.appendChild(svgElement('line', {
+                x1: pointX,
+                x2: pointX,
+                y1: y(value),
+                y2: meanY,
+                stroke: residual,
+                'stroke-width': '2.1',
+                opacity: '.88'
+              }));
+            });
+          }
+
+          if (showBetween && Math.abs(model.means[groupIndex] - model.grandMean) > 1e-9) {
+            const arrowX = centre + Math.min(band * .37, 62);
+            svg.appendChild(svgElement('line', {
+              x1: arrowX,
+              x2: arrowX,
+              y1: meanY,
+              y2: y(model.grandMean),
+              stroke: between,
+              'stroke-width': '2.4',
+              'stroke-dasharray': '6 5',
+              'marker-start': 'url(#arrow-start)',
+              'marker-end': 'url(#arrow-end)'
+            }));
+          }
+
+          const meanHalfWidth = Math.min(38, band * .28);
+          svg.appendChild(svgElement('line', {
+            x1: centre - meanHalfWidth,
+            x2: centre + meanHalfWidth,
+            y1: meanY,
+            y2: meanY,
+            stroke: ink,
+            'stroke-width': '3.2',
+            'stroke-linecap': 'round'
+          }));
+
+          values.forEach((value, pointIndex) => {
+            const pointX = centre + JITTER[pointIndex] * jitterScale * 2;
+            svg.appendChild(svgElement('circle', {
+              cx: pointX,
+              cy: y(value),
+              r: compact ? '4.2' : '4.8',
+              fill: panel,
+              stroke: ink,
+              'stroke-width': '1.8'
+            }));
+          });
+
+          addText(svg, `Group ${GROUPS[groupIndex]}`, {
+            x: centre,
+            y: height - 14,
+            fill: ink,
+            'font-size': compact ? '11' : '12',
+            'text-anchor': 'middle',
+            'font-weight': '600'
+          });
+        });
+
+        svg.appendChild(svgElement('line', {
+          x1: margin.left,
+          x2: margin.left,
+          y1: margin.top,
+          y2: height - margin.bottom,
+          stroke: ink,
+          'stroke-width': '1',
+          opacity: '.45'
+        }));
+      }
+
+      function fSurvival(x, dfResidual) {
+        return (dfResidual / (dfResidual + 2 * x)) ** (dfResidual / 2);
+      }
+
+      function fDensity(x, dfResidual) {
+        const survival = fSurvival(x, dfResidual);
+        return survival * dfResidual / (dfResidual + 2 * x);
+      }
+
+      function drawFCurve(model) {
+        const svg = $('f-curve');
+        const wrap = svg.parentElement;
+        const width = Math.max(280, Math.round(wrap.clientWidth || 500));
+        const height = Math.max(110, Math.round(wrap.clientHeight || 126));
+        const margin = { top: 20, right: 15, bottom: 25, left: 26 };
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+        // Extend far enough that less than 0.5% of the reported right-tail
+        // probability lies beyond the plotted range.
+        const remainingTail = Math.max(model.p * .005, 1e-300);
+        const tailLimit = model.dfResidual / 2 * (remainingTail ** (-2 / model.dfResidual) - 1);
+        const xMax = Math.max(6, model.ratio * 1.08, tailLimit);
+        const samples = 180;
+        const points = Array.from({ length: samples + 1 }, (_, index) => {
+          const xValue = xMax * index / samples;
+          return { x: xValue, density: fDensity(xValue, model.dfResidual) };
+        });
+        const maxDensity = Math.max(...points.map(point => point.density));
+        const x = value => margin.left + value / xMax * plotWidth;
+        const y = density => margin.top + plotHeight - density / maxDensity * plotHeight;
+        const ink = css('--ink');
+        const muted = css('--muted');
+        const between = css('--between');
+        const betweenSoft = css('--between-soft');
+
+        svg.replaceChildren();
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        const title = svgElement('title', { id: 'f-title' });
+        title.textContent = `Null F distribution with ${model.dfBetween} and ${model.dfResidual} degrees of freedom`;
+        const description = svgElement('desc', { id: 'f-description' });
+        description.textContent = `The observed F statistic is ${number(model.ratio)} and the shaded right-tail probability is ${pText(model.p)}.`;
+        svg.append(title, description);
+
+        const curvePath = points.map((point, index) => `${index ? 'L' : 'M'}${x(point.x).toFixed(2)},${y(point.density).toFixed(2)}`).join(' ');
+        const observedOnScale = Math.min(model.ratio, xMax);
+        const tailPoints = points.filter(point => point.x >= observedOnScale);
+        if (tailPoints.length > 1 && model.ratio <= xMax) {
+          const tailPath = [
+            `M${x(observedOnScale)},${margin.top + plotHeight}`,
+            ...tailPoints.map(point => `L${x(point.x).toFixed(2)},${y(point.density).toFixed(2)}`),
+            `L${x(xMax)},${margin.top + plotHeight}`,
+            'Z'
+          ].join(' ');
+          svg.appendChild(svgElement('path', { d: tailPath, fill: betweenSoft, stroke: 'none' }));
+        }
+
+        svg.appendChild(svgElement('line', {
+          x1: margin.left,
+          x2: width - margin.right,
+          y1: margin.top + plotHeight,
+          y2: margin.top + plotHeight,
+          stroke: ink,
+          'stroke-width': '1',
+          opacity: '.55'
+        }));
+        svg.appendChild(svgElement('path', {
+          d: curvePath,
+          fill: 'none',
+          stroke: ink,
+          'stroke-width': '2'
+        }));
+
+        const markerX = x(observedOnScale);
+        svg.appendChild(svgElement('line', {
+          x1: markerX,
+          x2: markerX,
+          y1: margin.top + 3,
+          y2: margin.top + plotHeight,
+          stroke: between,
+          'stroke-width': '2'
+        }));
+        const markerLabel = model.ratio > xMax ? `F = ${number(model.ratio)} (off scale)` : `F = ${number(model.ratio)}`;
+        const anchorAtEnd = model.ratio > xMax || markerX > width - margin.right - 85;
+        addText(svg, markerLabel, {
+          x: anchorAtEnd ? markerX - 3 : markerX + 5,
+          y: margin.top + 10,
+          fill: between,
+          'font-size': '10.5',
+          'font-weight': '700',
+          'text-anchor': anchorAtEnd ? 'end' : 'start'
+        });
+
+        [0, xMax / 2, xMax].forEach(tick => {
+          addText(svg, number(tick, tick === 0 || xMax >= 100 ? 0 : 1), {
+            x: x(tick),
+            y: height - 7,
+            fill: muted,
+            'font-size': '9.5',
+            'text-anchor': tick === 0 ? 'start' : tick === xMax ? 'end' : 'middle'
+          });
+        });
+        addText(svg, `null F(${model.dfBetween}, ${model.dfResidual}) distribution`, {
+          x: margin.left,
+          y: 13,
+          fill: muted,
+          'font-size': '10.5'
+        });
+        addText(svg, 'right tail', {
+          x: width - margin.right,
+          y: 13,
+          fill: between,
+          'font-size': '10',
+          'text-anchor': 'end'
+        });
+      }
+
+      let announceTimer;
+      function announce(model) {
+        clearTimeout(announceTimer);
+        announceTimer = setTimeout(() => {
+          let message = `Between mean square ${number(model.msBetween)}. Residual mean square ${number(model.msResidual)}. Mean-square ratio ${number(model.ratio)}.`;
+          if ($('show-inference').checked) {
+            message += ` F statistic ${number(model.ratio)}. ${pText(model.p).replace('p', 'P value')}.`;
+          }
+          $('live-summary').textContent = message;
+        }, 280);
+      }
+
+      function render(shouldAnnounce = false) {
+        const model = compute();
+        updateControls(model);
+        updateCalculations(model);
+        drawPlot(model);
+        if ($('show-inference').checked) drawFCurve(model);
+        if (shouldAnnounce) announce(model);
+      }
+
+      ['mean-a', 'mean-b', 'mean-c', 'variance'].forEach(id => {
+        $(id).addEventListener('input', () => render(true));
+      });
+
+      ['show-between', 'show-residual'].forEach(id => {
+        $(id).addEventListener('change', () => render(true));
+      });
+
+      $('show-calculation').addEventListener('change', event => {
+        const open = event.currentTarget.checked;
+        event.currentTarget.setAttribute('aria-expanded', String(open));
+        $('calculation-panel').hidden = !open;
+        $('live-summary').textContent = open ? 'ANOVA calculation shown.' : 'ANOVA calculation hidden.';
+        requestAnimationFrame(() => render(false));
+      });
+
+      $('show-inference').addEventListener('change', event => {
+        const open = event.currentTarget.checked;
+        event.currentTarget.setAttribute('aria-expanded', String(open));
+        $('inference-panel').hidden = !open;
+        document.body.classList.toggle('inference-open', open);
+        requestAnimationFrame(() => render(true));
+      });
+
+      $('reset').addEventListener('click', () => {
+        GROUPS.forEach((group, index) => {
+          $(`mean-${group.toLowerCase()}`).value = DEFAULTS.means[index];
+        });
+        $('variance').value = DEFAULTS.variance;
+        $('show-between').checked = false;
+        $('show-residual').checked = false;
+        $('show-calculation').checked = false;
+        $('show-calculation').setAttribute('aria-expanded', 'false');
+        $('calculation-panel').hidden = true;
+        $('show-inference').checked = false;
+        $('show-inference').setAttribute('aria-expanded', 'false');
+        $('inference-panel').hidden = true;
+        document.body.classList.remove('inference-open');
+        render(true);
+      });
+
+      let resizeFrame;
+      new ResizeObserver(() => {
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(() => render(false));
+      }).observe($('stage'));
+
+      render(false);
+    })();
+  </script>
+</body>
+</html>
